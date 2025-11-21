@@ -89,8 +89,8 @@ import { disableMouseEvents, enableMouseEvents } from './ui/utils/mouse.js';
 import { ScrollProvider } from './ui/contexts/ScrollProvider.js';
 import ansiEscapes from 'ansi-escapes';
 import { isAlternateBufferEnabled } from './ui/hooks/useAlternateBuffer.js';
-
-import { getMouseSupport } from './utils/detectMouse.js';
+ 
+import { detectMouseSupport } from './utils/detectMouse.js';
 
 import { profiler } from './ui/components/DebugProfiler.js';
 
@@ -169,18 +169,8 @@ ${reason.stack}`
 /**
  * Checks if the terminal supports mouse interactions.
  */
-export function checkMouseSupport(): boolean {
-  if (!process.stdout.isTTY) {
-    return false;
-  }
-
-  // CI environments usually don't support mouse interaction properly
-  if (process.env['CI']) {
-    return false;
-  }
-
-  const support = getMouseSupport();
-  return support.mouse;
+export async function checkMouseSupport(): Promise<boolean> {
+  return detectMouseSupport();
 }
 
 export async function startInteractiveUI(

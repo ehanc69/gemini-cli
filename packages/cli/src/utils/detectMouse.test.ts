@@ -68,8 +68,9 @@ describe('getMouseSupport', () => {
       expect(support.mouseProtocol).toBe('xterm');
     });
 
-    it('should return false for ConEmu (Cmder) (ConEmuPID) as it is currently disabled', () => {
+    it('should return false for ConEmu (Cmder) (ConEmuPID) even if other vars are set', () => {
       process.env['ConEmuPID'] = '1234';
+      process.env['WT_SESSION'] = 'session-id'; // Conflicting signal
       const support = getMouseSupport();
       expect(support.mouse).toBe(false);
     });

@@ -494,8 +494,9 @@ describe('validateDnsResolutionOrder', () => {
   });
 });
 
+ 
 vi.mock('./utils/detectMouse.js', () => ({
-  getMouseSupport: vi.fn(() => ({ mouse: true })),
+  detectMouseSupport: vi.fn(() => Promise.resolve(true)),
 }));
 
 describe('checkMouseSupport', () => {
@@ -524,36 +525,17 @@ describe('checkMouseSupport', () => {
     vi.restoreAllMocks();
   });
 
-  it('should return false if not TTY', async () => {
-    Object.defineProperty(process.stdout, 'isTTY', { value: false });
+  it('should return true if detectMouseSupport says so', async () => {
     const { checkMouseSupport } = await import('./gemini.js');
-    expect(checkMouseSupport()).toBe(false);
+    expect(await checkMouseSupport()).toBe(true);
   });
 
-  it('should return false if CI environment', async () => {
-    process.env['CI'] = 'true';
+  it('should return false if detectMouseSupport says no', async () => {
+     
+    const { detectMouseSupport } = await import('./utils/detectMouse.js');
+    vi.mocked(detectMouseSupport).mockResolvedValue(false);
     const { checkMouseSupport } = await import('./gemini.js');
-    expect(checkMouseSupport()).toBe(false);
-  });
-
-  it('should return true if getMouseSupport says so', async () => {
-    const { checkMouseSupport } = await import('./gemini.js');
-    expect(checkMouseSupport()).toBe(true);
-  });
-
-  it('should return false if getMouseSupport says no', async () => {
-    const { getMouseSupport } = await import('./utils/detectMouse.js');
-    vi.mocked(getMouseSupport).mockReturnValue({
-      mouse: false,
-      isTTY: true,
-      isSSH: false,
-      appId: 'unknown',
-      safe: false,
-      generic: 'unknown',
-      mouseProtocol: 'none',
-    });
-    const { checkMouseSupport } = await import('./gemini.js');
-    expect(checkMouseSupport()).toBe(false);
+    expect(await checkMouseSupport()).toBe(false);
   });
 });
 

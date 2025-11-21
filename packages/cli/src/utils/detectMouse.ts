@@ -248,11 +248,25 @@ export function getMouseSupport(): MouseSupport {
   }
 
   // Add Windows support manually as it was requested by the user previously
+
   // and the library extraction might be old or not covering it
+
   if (process.platform === 'win32') {
+    // Cmder/ConEmu does NOT support mouse correctly in this context, so explicit disable.
+
+    if (process.env['ConEmuPID']) {
+      result.mouse = false;
+
+      result.mouseProtocol = 'none';
+
+      return result;
+    }
+
     if (process.env['WT_SESSION'] || process.env['TERM_PROGRAM'] === 'vscode') {
       result.mouse = true;
+
       // We can assume xterm for these modern windows terminals
+
       if (result.mouseProtocol === 'none') {
         result.mouseProtocol = 'xterm';
       }
@@ -260,4 +274,95 @@ export function getMouseSupport(): MouseSupport {
   }
 
   return result;
+}
+
+/**
+ * Actively queries the terminal using escape sequences to check for capabilities.
+ * This is more reliable than env vars but requires an async round-trip.
+ */
+export async function detectMouseSupport(timeout = 300): Promise<boolean> {
+  // 1. Safety Checks (Environment blocking)
+  if (!process.stdout.isTTY || process.env['CI']) {
+    return false;
+  }
+
+  // Explicitly disable for ConEmu (Cmder) based on user reports of issues
+  if (process.env['ConEmuPID']) {
+    return false;
+  }
+
+  // 2. Platform shortcuts
+  // Windows Terminal (WT_SESSION) and VSCode are known to work well.
+  if (process.platform === 'win32') {
+    if (process.env['WT_SESSION'] || process.env['TERM_PROGRAM'] === 'vscode') {
+      return true;
+    }
+  }
+
+  // 3. Active Query (The "Sequence" Method)
+  // We send Primary Device Attributes (\x1b[c).
+  // If the terminal responds, it supports escape sequences.
+  // Almost all terminals that support mouse also support DA queries.
+  try {
+    const response = await queryTerminal('\x1b[c', timeout);
+    if (response && response.includes('\x1b[')) {
+      return true;
+    }
+  } catch {
+    // Timeout or error
+  }
+
+  // 4. Fallback to Heuristics if active query fails (or times out)
+  // This covers cases where stdin/out might be intercepted or very slow.
+  const heuristic = getMouseSupport();
+  return heuristic.mouse;
+}
+
+function queryTerminal(
+  sequence: string,
+  timeoutMs: number,
+): Promise<string | null> {
+  return new Promise((resolve) => {
+    if (!process.stdin.isTTY) {
+      resolve(null);
+      return;
+    }
+
+    const stdin = process.stdin;
+    const wasRaw = stdin.isRaw;
+
+    // We need raw mode to read the response byte-by-byte without hitting enter
+    stdin.setRawMode(true);
+    stdin.resume();
+
+    let buffer = '';
+    // eslint-disable-next-line prefer-const
+    let timer: NodeJS.Timeout;
+
+    const cleanup = () => {
+      stdin.removeListener('data', onData);
+      stdin.setRawMode(wasRaw);
+      if (!wasRaw) {
+        stdin.pause();
+      }
+      clearTimeout(timer);
+    };
+
+    const onData = (chunk: Buffer) => {
+      buffer += chunk.toString();
+      // DA response usually ends with 'c' (e.g. \x1b[?1;2c)
+      if (buffer.endsWith('c')) {
+        cleanup();
+        resolve(buffer);
+      }
+    };
+
+    timer = setTimeout(() => {
+      cleanup();
+      resolve(null);
+    }, timeoutMs);
+
+    stdin.on('data', onData);
+    process.stdout.write(sequence);
+  });
 }
