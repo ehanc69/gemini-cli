@@ -568,6 +568,10 @@ export async function loadCliConfig(
     settings.model?.name ||
     defaultModel;
 
+  if (Array.isArray(resolvedModel)) {
+    throw Error(`duplicate models: ${resolvedModel}`);
+  }
+
   const sandboxConfig = await loadSandboxConfig(settings, argv);
   const screenReader =
     argv.screenReader !== undefined
